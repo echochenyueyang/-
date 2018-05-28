@@ -1,0 +1,26 @@
+#!/usr/local/bin/expect -f
+
+set nodeaddress [lindex $argv 0]
+set username    [lindex $argv 1]
+set password    [lindex $argv 2]
+set promptp "assword: "
+set promptc "$ "
+
+spawn ssh  ${username}@$nodeaddress
+expect {
+        "(yes/no)?" { send "yes\r";exp_continue }
+        "$promptp" { send "${password}\r" }
+}
+expect "$promptc"
+send "hostname\r"
+expect "$promptc"
+send "check_dir.sh\r"
+expect "$promptc"
+send "ls -l /var/opt/STS/ |tail -20\r"
+expect "$promptc"
+send "ls -l /var/opt/Billing/\r"
+expect "$promptc"
+send "exit\r"
+
+expect eof
+exit 0
