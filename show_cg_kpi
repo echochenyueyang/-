@@ -1,0 +1,117 @@
+#!/usr/bin/python
+
+import os,subprocess,time
+import threading,fnmatch
+
+def readcfg(p):
+    cfgList = []
+    with open(p,'r') as f:
+        lineList = f.readlines()
+    for line in lineList:
+        if len(line.strip()) == 0 or line.strip()[0] == "#":
+            continue
+        cfgList.append(line)
+    return cfgList
+
+def getdata(name,ip,username,password):
+    tmpfile = os.path.join(os.path.join(path,"tmp"),name)
+    os.system("cat /dev/null > %s"%tmpfile)
+    cmd = ""
+    if username == "mmsuper":
+        cmd = "%s %s %s %s>%s"%(os.path.join(os.path.join(path,"exp"),expname1),ip,username,password,tmpfile)
+    if username == "bgw":
+        cmd = "%s %s %s %s>%s"%(os.path.join(os.path.join(path,"exp"),expname2),ip,username,password,tmpfile)
+    run_cmd = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+    run_cmd.wait()
+    return
+
+def parsedata(fp):
+    dataList = []
+    flagworld = ["GPRS/temp","EPC/temp","storage/inbuffer","storage/outbuffer","storage/corrupt",
+    "Billing/PGW","Billing/SGW","Billing/GCDR","Billing/SCDR","GPRS/tapeBuffer","EPC/tapeBuffer","STS/working"]
+    with open(fp,'r') as f:
+        ctxList = f.readlines()
+    k = None
+    for index,line in enumerate(ctxList):
+        if "hostname" in line:
+            dataList.append(ctxList[index+1].strip())
+            continue
+        for flag in flagworld:
+            if flag in line:
+                dataList.append(line.split()[-1])
+        if "-BGwOutput" in line:
+            k = index
+            k = int(k) 
+            continue
+        if "working" in line and "med" in line:
+            for i in range(k,index+1):
+                dataList.append(ctxList[i].split()[5:])
+    return dataList
+
+def formatdata(datalist):
+    print "="*133
+    print "# Display flag (!) while file number is more than %s. "%flagnum
+    output = "="*133+"\n"+"%-12s%-7s%-9s%-10s%-10s%-6s%-6s%-7s%-7s%-11s%-10s%s"%(
+        "name", "temp", "inbuff", "outbuff", "corrupt",
+        "PGW", "SGW", "GCDR","SCDR", "tapebuff", "working", "Dirmsg (date/dirname)")
+    for data in datalist:
+        if len(data) <12:
+            print "# %s data incomplete"%data[0]
+            continue
+        output += "\n"+"-"*133
+        output += "\n%-12s%-7s%-9s%-10s%-10s%-6s%-6s%-7s%-7s%-11s%-10s%s"%(
+            data[0],judgedata(data[1]),judgedata(data[2]),judgedata(data[3]),judgedata(data[4]),
+            judgedata(data[5]),judgedata(data[6]),judgedata(data[7]),judgedata(data[8]),
+            judgedata(data[9]),judgedata(data[10]),
+            "%-4s%-3s%-6s%s"%(data[11][0],data[11][1],data[11][2],data[11][3]))
+        for d in data[12:]:
+            output += "\n%95s%s"%(" ","%-4s%-3s%-6s%s"%(d[0],d[1],d[2],d[3]))
+    return output
+
+def judgedata(n):
+    try:
+        n = int(n)
+        if n > flagnum:
+            return "%s(!)"%n
+        else:
+            return n
+    except:
+        return n
+
+def main():
+
+    starttime = time.time()
+    cfgList = readcfg(os.path.join(os.path.join(path,"cfg"),cfgname))
+
+    threads = []
+    for msg in cfgList:
+        msgList = msg.split()
+        name,ip,username,password = msgList[0],msgList[1],msgList[2],msgList[3]
+        t = threading.Thread(target=getdata,args=(name,ip,username,password))
+        t.start()
+        threads.append(t)
+    for t in threads:
+        t.join()
+
+    tmpdir = os.path.join(path,"tmp")
+    fileList = fnmatch.filter(os.listdir(tmpdir),"CD*BER")
+    fileList.sort()
+    parsedataList = []
+    for file in fileList:
+        parsedataList.append(parsedata(os.path.join(tmpdir,file)))
+    output = formatdata(parsedataList)
+    endtime = time.time()
+
+    print "%s\n%s\nFinished [run time: %.2f]"%(output,"-"*133,endtime - starttime)
+
+if __name__ == "__main__":
+
+    path = "/home/alx_lhao/tools/"
+    # path = r"C:/Users/HI/Desktop/p/EPCtools"
+    cfgname = "cg_om_ip.cfg"
+    expname1 = "cg_kpi.exp"
+    expname2 = "cg_kpi_cdmm.exp"
+        
+    flagnum = 800
+
+    main()
